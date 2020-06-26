@@ -1,5 +1,73 @@
 import
-  os, random, strutils, system
+  os, random, sdl2, strutils, system
+import strformat
+
+type
+  RGB = tuple
+    red: byte
+    green: byte
+    blue: byte
+
+proc rgb(r, g, b: SomeInteger): RGB =
+  return (r.uint8, g.uint8, b.uint8)
+
+proc rgb(grey: SomeInteger): RGB =
+  return rgb(grey, grey, grey)
+
+const
+  width = 64
+  height = 32
+  scale = 10
+  white: RGB = rgb(0xFF)
+  black: RGB = rgb(0x00)
+  fontset: array[5 * 16, SomeInteger] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, # 0
+    0x20, 0x60, 0x20, 0x20, 0x70, # 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, # 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, # 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, # 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, # 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, # 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, # 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, # 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, # 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, # A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, # B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, # C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, # D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, # E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, # F
+  ]
+
+discard sdl2.init(INIT_VIDEO + INIT_AUDIO)
+
+let
+  window = createWindow("Chip-8 - Nim", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width * scale, height * scale, 0)
+  renderer = createRenderer(window, -1, 0)
+  texture = createTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height)
+var buffer: array[width * height, RGB]
+
+discard renderer.setLogicalSize(width, height)
+
+proc draw() =
+  texture.updateTexture(nil, addr buffer, width * sizeof(RGB))
+  renderer.clear
+  renderer.copy texture, nil, nil
+  renderer.present
+
+proc clearScreen() =
+  var color: uint8
+  for i in 0..<(width * height):
+    buffer[i] = black
+
+clearScreen()
+draw()
+
+proc getPos(x: SomeInteger, y: SomeInteger): RGB =
+  return buffer[(y mod height) * width + (x mod width)]
+
+proc setPos(x: SomeInteger, y: SomeInteger, color: RGB) =
+  buffer[(y mod height) * width + (x mod width)] = color
 
 proc invalidOperation(opcode: uint16) =
   echo("Encountered an unhandled operation: 0x$1" % [toHex(opcode)])
@@ -12,6 +80,8 @@ proc emulate() =
     memory: array[4096, uint8]
   defer: close(file)
   discard readBytes(file, memory, 0x200, 0xFFF - 0x200)
+  for idx in 0..<fontset.len:
+    memory[idx] = fontset[idx].uint8
   var
     v: array[16, uint8]      # general purpose registers
     i: uint16 = 0            # register typically used for addresses
@@ -21,6 +91,11 @@ proc emulate() =
     stack: array[16, uint16] # stores addresses to return to from subroutines
     sp: uint8 = 0            # current stack pointer
   while true:
+    var evt = sdl2.defaultEvent
+    while pollEvent(evt):
+      if evt.kind == QuitEvent:
+        echo("Quitting")
+        quit(1)
     let
       opcode: uint16 = (uint16(memory[pc]) shl 8) or memory[pc + 1]
       op_1 = uint8((opcode and 0xF000) shr 12)
@@ -32,14 +107,15 @@ proc emulate() =
       n = op_4
       nn = uint8(opcode and 0x00FF)
       nnn = opcode and 0x0FFF
-    echo("Opcode:0x$1, PC:0x$2" % [toHex(opcode), toHex(pc)])
     pc += 2
     case op_1
     of 0x0:
       case op_3
       of 0xE:
         case op_4
-        of 0x0: discard # cls
+        of 0x0: # cls
+          clearScreen()
+          draw()
         of 0xE: # ret
           pc = stack[sp]
           sp -= 1
@@ -100,7 +176,21 @@ proc emulate() =
       pc = nnn + v[0]
     of 0xC: # rnd vx, byte
       v[x] = nn and rand(256).uint8
-    of 0xD: discard # drw vx, vy, n
+    of 0xD: # drw vx, vy, n
+      echo(fmt"Drawing -- x:{x}, vx:{v[x]}, y:{y}, vy:{v[y]}, n:{n}")
+      echo(buffer)
+      v[0xF] = 0
+      var
+        row_byte: uint8
+        old_color: RGB
+      for row in 0.uint8..<n:
+        row_byte = memory[i + row]
+        for col in 0.uint8..<8.uint8:
+          if (row_byte and (0x80.uint8 shr col)) > 0:
+            old_color = getPos(v[x] + col, v[y] + row)
+            v[0xF] = v[0xF] or (old_color == white).uint8
+            setPos(v[x] + col, v[y] + row, if old_color == white: black else: white)
+      draw()
     of 0xE:
       case op_3
       of 0x9: discard # skp vx
@@ -141,7 +231,7 @@ proc emulate() =
 proc main() =
   if paramCount() != 1:
     echo("Run with ./chip8 /path/to/rom")
-    quit 1
+    quit(1)
   else:
     emulate()
 
