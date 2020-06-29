@@ -64,10 +64,10 @@ clearScreen()
 draw()
 
 proc getPos(x: SomeInteger, y: SomeInteger): RGB =
-  return buffer[(y mod height) * width + (x mod width)]
+  return buffer[(int(y) mod height) * width + (int(x) mod width)]
 
 proc setPos(x: SomeInteger, y: SomeInteger, color: RGB) =
-  buffer[(y mod height) * width + (x mod width)] = color
+  buffer[(int(y) mod height) * width + (int(x) mod width)] = color
 
 proc invalidOperation(opcode: uint16) =
   echo("Encountered an unhandled operation: 0x$1" % [toHex(opcode)])
@@ -177,19 +177,17 @@ proc emulate() =
     of 0xC: # rnd vx, byte
       v[x] = nn and rand(256).uint8
     of 0xD: # drw vx, vy, n
-      echo(fmt"Drawing -- x:{x}, vx:{v[x]}, y:{y}, vy:{v[y]}, n:{n}")
-      echo(buffer)
       v[0xF] = 0
       var
         row_byte: uint8
-        old_color: RGB
+        was_enabled: bool
       for row in 0.uint8..<n:
         row_byte = memory[i + row]
         for col in 0.uint8..<8.uint8:
           if (row_byte and (0x80.uint8 shr col)) > 0:
-            old_color = getPos(v[x] + col, v[y] + row)
-            v[0xF] = v[0xF] or (old_color == white).uint8
-            setPos(v[x] + col, v[y] + row, if old_color == white: black else: white)
+            was_enabled = getPos(v[x] + col, v[y] + row) == white
+            v[0xF] = v[0xF] or uint8(was_enabled)
+            setPos(v[x] + col, v[y] + row, if was_enabled: black else: white)
       draw()
     of 0xE:
       case op_3
