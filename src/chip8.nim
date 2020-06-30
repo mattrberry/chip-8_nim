@@ -73,13 +73,16 @@ proc invalidOperation(opcode: uint16) =
   echo("Encountered an unhandled operation: 0x$1" % [toHex(opcode)])
   quit(1)
 
+proc readRom(path: string, memory: var array[4096, uint8]) =
+  var file = open(path)
+  discard readBytes(file, memory, 0x200, 0xFFF - 0x200)
+  close(file)
+
 proc emulate() =
   var
     romPath = paramStr(1)
-    file = open(romPath)
     memory: array[4096, uint8]
-  defer: close(file)
-  discard readBytes(file, memory, 0x200, 0xFFF - 0x200)
+  readRom(romPath, memory)
   for idx in 0..<fontset.len:
     memory[idx] = fontset[idx].uint8
   var
