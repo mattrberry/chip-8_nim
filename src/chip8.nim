@@ -1,6 +1,5 @@
 import
-  os, random, sdl2, strutils, system
-import strformat
+  os, random, sdl2, strformat, strutils, system, tables
 
 type
   RGB = tuple
@@ -38,6 +37,15 @@ const
     0xF0, 0x80, 0xF0, 0x80, 0xF0, # E
     0xF0, 0x80, 0xF0, 0x80, 0x80, # F
   ]
+  keymap = to_table({
+    K_1: 0x1, K_2: 0x2, K_3: 0x3, K_4: 0xC,
+    K_Q: 0x4, K_W: 0x5, K_E: 0x6, K_R: 0xD,
+    K_A: 0x7, K_S: 0x8, K_D: 0x9, K_F: 0xE,
+    K_Z: 0xA, K_X: 0x0, K_C: 0xB, K_V: 0xF
+  })
+
+var
+  keys: array[16, bool]
 
 discard sdl2.init(INIT_VIDEO + INIT_AUDIO)
 
@@ -96,9 +104,17 @@ proc emulate() =
   while true:
     var evt = sdl2.defaultEvent
     while pollEvent(evt):
-      if evt.kind == QuitEvent:
-        echo("Quitting")
-        quit(1)
+      case evt.kind
+      of QuitEvent: quit(0)
+      of KEY_DOWN:
+        let key = evt.key().keysym.sym
+        if keymap.has_key(key):
+          keys[keymap[key]] = true
+      of KEY_UP:
+        let key = evt.key().keysym.sym
+        if keymap.has_key(key):
+          keys[keymap[key]] = false
+      else: discard
     let
       opcode: uint16 = (uint16(memory[pc]) shl 8) or memory[pc + 1]
       op_1 = uint8((opcode and 0xF000) shr 12)
@@ -194,8 +210,12 @@ proc emulate() =
       draw()
     of 0xE:
       case op_3
-      of 0x9: discard # skp vx
-      of 0xA: discard # sknp vx
+      of 0x9: # skp vx
+        if keys[v[x]]:
+          pc += 2
+      of 0xA: # sknp vx
+        if not keys[v[x]]:
+          pc += 2
       else: invalidOperation(opcode)
     of 0xF:
       case op_3
