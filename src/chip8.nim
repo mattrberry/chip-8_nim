@@ -7,18 +7,18 @@ type
     green: byte
     blue: byte
 
-proc rgb(r, g, b: SomeInteger): RGB =
+proc color(r, g, b: SomeInteger): RGB =
   return (r.uint8, g.uint8, b.uint8)
 
-proc rgb(grey: SomeInteger): RGB =
-  return rgb(grey, grey, grey)
+proc color(shade: SomeInteger): RGB =
+  return color(shade, shade, shade)
 
 const
   width = 64
   height = 32
   scale = 10
-  white: RGB = rgb(0xFF)
-  black: RGB = rgb(0x00)
+  white: RGB = color(0xFF)
+  black: RGB = color(0x00)
   fontset: array[5 * 16, SomeInteger] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, # 0
     0x20, 0x60, 0x20, 0x20, 0x70, # 1
@@ -68,9 +68,6 @@ proc clearScreen() =
   for i in 0..<(width * height):
     buffer[i] = black
 
-clearScreen()
-draw()
-
 proc getPos(x: SomeInteger, y: SomeInteger): RGB =
   return buffer[(int(y) mod height) * width + (int(x) mod width)]
 
@@ -91,6 +88,8 @@ proc emulate() =
     romPath = paramStr(1)
     memory: array[4096, uint8]
   readRom(romPath, memory)
+  clearScreen()
+  draw()
   for idx in 0..<fontset.len:
     memory[idx] = fontset[idx].uint8
   var
