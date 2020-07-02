@@ -1,5 +1,5 @@
 import
-  os, random, sdl2, strformat, strutils, system, tables
+  os, random, sdl2, sdl2/audio, strformat, strutils, system, tables
 
 type
   RGB = tuple
@@ -83,6 +83,38 @@ proc readRom(path: string, memory: var array[4096, uint8]) =
   discard readBytes(file, memory, 0x200, 0xFFF - 0x200)
   close(file)
 
+const
+  bufferSize = 2000
+  sampleRate = 40000
+
+var
+  soundTimer = 0'u8
+  soundTimerCounter = 0
+  audioBufferFull: array[bufferSize, float32]
+  audioBufferEmpty: array[bufferSize, float32]
+  obtainedSpec: AudioSpec
+  audioSpec: AudioSpec
+
+proc audioCallback(userdata: pointer; stream: ptr uint8; len: cint) {.cdecl.} =
+  if soundTimer > 0:
+    copyMem(stream, addr audioBufferFull, len)
+  else:
+    copyMem(stream, addr audioBufferEmpty, len)
+
+for i in 0..<len(audioBufferFull):
+  audioBufferFull[i] = if (i mod 50) < 25: 1'f else: -1'f
+
+audioSpec.freq = sampleRate.cint
+audioSpec.format = AUDIO_F32
+audioSpec.channels = 1
+audioSpec.samples = bufferSize
+audioSpec.callback = audioCallback
+audioSpec.userdata = nil
+audioSpec.padding = 0
+
+discard openAudio(addr audioSpec, addr obtainedSpec)
+pauseAudio(0)
+
 proc emulate() =
   var
     romPath = paramStr(1)
@@ -95,8 +127,8 @@ proc emulate() =
   var
     v: array[16, uint8]      # general purpose registers
     i: uint16 = 0            # register typically used for addresses
-    delay_timer: uint8 = 0   # todo
-    sound_timer: uint8 = 0   # todo
+    delayTimer: uint8 = 0   # todo
+    delayTimerCounter = 0
     pc: uint16 = 0x200       # program counter starts at rom
     stack: array[16, uint16] # stores addresses to return to from subroutines
     sp: uint8 = 0            # current stack pointer
@@ -114,6 +146,14 @@ proc emulate() =
         if keymap.has_key(key):
           keys[keymap[key]] = false
       else: discard
+    if soundTimer > 0 and soundTimerCounter mod 8 == 0:
+      soundTimer -= 1
+      soundTimerCounter = 0
+    soundTimerCounter += 1
+    if delayTimer > 0 and delayTimerCounter mod 8 == 0:
+      delayTimer -= 1
+      delayTimerCounter = 0
+    delayTimerCounter += 1
     let
       opcode: uint16 = (uint16(memory[pc]) shl 8) or memory[pc + 1]
       op_1 = uint8((opcode and 0xF000) shr 12)
@@ -221,15 +261,16 @@ proc emulate() =
       of 0x0:
         case op_4
         of 0x7: # ld vx, dt
-          v[x] = delay_timer
+          v[x] = delayTimer
         of 0xA: discard # ld vx, k
         else: invalidOperation(opcode)
       of 0x1:
         case op_4
         of 0x5: # ld dt, vx
-          delay_timer = v[x]
+          delayTimer = v[x]
         of 0x8: # ld st, vx
-          sound_timer = v[x]
+          soundTimer = v[x]
+          echo(fmt"setting soundtimer {soundTimer}")
         of 0xE: # add i, vx
           i += v[x]
         else: invalidOperation(opcode)
