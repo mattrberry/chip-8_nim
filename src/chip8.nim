@@ -133,6 +133,7 @@ proc emulate() =
     stack: array[16, uint16] # stores addresses to return to from subroutines
     sp: uint8 = 0            # current stack pointer
   while true:
+    sleep(2) # sleep 2 milliseconds and call it a day, whatever
     var evt = sdl2.defaultEvent
     while pollEvent(evt):
       case evt.kind
