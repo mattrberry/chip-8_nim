@@ -19,23 +19,23 @@ const
   scale = 10
   white: RGB = color(0xFF)
   black: RGB = color(0x00)
-  fontset: array[5 * 16, SomeInteger] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, # 0
-    0x20, 0x60, 0x20, 0x20, 0x70, # 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, # 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, # 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, # 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, # 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, # 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, # 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, # 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, # 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, # A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, # B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, # C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, # D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, # E
-    0xF0, 0x80, 0xF0, 0x80, 0x80, # F
+  fontset: array[5 * 16, uint8] = [
+    0xF0'u8, 0x90'u8, 0x90'u8, 0x90'u8, 0xF0'u8, # 0
+    0x20'u8, 0x60'u8, 0x20'u8, 0x20'u8, 0x70'u8, # 1
+    0xF0'u8, 0x10'u8, 0xF0'u8, 0x80'u8, 0xF0'u8, # 2
+    0xF0'u8, 0x10'u8, 0xF0'u8, 0x10'u8, 0xF0'u8, # 3
+    0x90'u8, 0x90'u8, 0xF0'u8, 0x10'u8, 0x10'u8, # 4
+    0xF0'u8, 0x80'u8, 0xF0'u8, 0x10'u8, 0xF0'u8, # 5
+    0xF0'u8, 0x80'u8, 0xF0'u8, 0x90'u8, 0xF0'u8, # 6
+    0xF0'u8, 0x10'u8, 0x20'u8, 0x40'u8, 0x40'u8, # 7
+    0xF0'u8, 0x90'u8, 0xF0'u8, 0x90'u8, 0xF0'u8, # 8
+    0xF0'u8, 0x90'u8, 0xF0'u8, 0x10'u8, 0xF0'u8, # 9
+    0xF0'u8, 0x90'u8, 0xF0'u8, 0x90'u8, 0x90'u8, # A
+    0xE0'u8, 0x90'u8, 0xE0'u8, 0x90'u8, 0xE0'u8, # B
+    0xF0'u8, 0x80'u8, 0x80'u8, 0x80'u8, 0xF0'u8, # C
+    0xE0'u8, 0x90'u8, 0x90'u8, 0x90'u8, 0xE0'u8, # D
+    0xF0'u8, 0x80'u8, 0xF0'u8, 0x80'u8, 0xF0'u8, # E
+    0xF0'u8, 0x80'u8, 0xF0'u8, 0x80'u8, 0x80'u8, # F
   ]
   keymap = to_table({
     K_1: 0x1, K_2: 0x2, K_3: 0x3, K_4: 0xC,
@@ -64,7 +64,6 @@ proc draw() =
   renderer.present
 
 proc clearScreen() =
-  var color: uint8
   for i in 0..<(width * height):
     buffer[i] = black
 
@@ -123,7 +122,7 @@ proc emulate() =
   clearScreen()
   draw()
   for idx in 0..<fontset.len:
-    memory[idx] = fontset[idx].uint8
+    memory[idx] = fontset[idx]
   var
     v: array[16, uint8]      # general purpose registers
     i: uint16 = 0            # register typically used for addresses
@@ -212,18 +211,18 @@ proc emulate() =
         v[x] = v[x] xor v[y]
       of 0x4: # add vx, vy
         v[x] += v[y]
-        v[0xF] = ord(v[x] < v[y]).uint8
+        v[0xF] = uint8(v[x] < v[y])
       of 0x5: # sub vx, vy
-        v[0xF] = ord(v[y] > v[x]).uint8
+        v[0xF] = uint8(v[y] > v[x])
         v[x] -= v[y]
       of 0x6: # shr vx, vy
-        v[0xF] = v[x] and 0x1
+        v[0xF] = v[x] and 0x1'u8
         v[x] = v[x] shr 1
       of 0x7: # subn vx, vy
-        v[0xF] = ord(v[x] <= v[y]).uint8
+        v[0xF] = uint8(v[x] <= v[y])
         v[x] = v[y] - v[x]
       of 0xE: # shl vx, vy
-        v[0xF] = (v[x] and 0x80) shr 7
+        v[0xF] = (v[x] and 0x80'u8) shr 7
         v[x] = v[x] shl 1
       else: invalidOperation(opcode)
     of 0x9: # sne vx, vy
@@ -236,14 +235,14 @@ proc emulate() =
     of 0xC: # rnd vx, byte
       v[x] = nn and rand(256).uint8
     of 0xD: # drw vx, vy, n
-      v[0xF] = 0
+      v[0xF] = 0'u8
       var
         row_byte: uint8
         was_enabled: bool
       for row in 0.uint8..<n:
         row_byte = memory[i + row]
-        for col in 0.uint8..<8.uint8:
-          if (row_byte and (0x80.uint8 shr col)) > 0:
+        for col in 0'u8..<8'u8:
+          if (row_byte and (0x80'u8 shr col)) > 0:
             was_enabled = getPos(v[x] + col, v[y] + row) == white
             v[0xF] = v[0xF] or uint8(was_enabled)
             setPos(v[x] + col, v[y] + row, if was_enabled: black else: white)
@@ -282,10 +281,10 @@ proc emulate() =
         memory[i + 1] = uint8((v[x] div 10) mod 10)
         memory[i + 2] = uint8((v[x] mod 100) mod 10)
       of 0x5: # ld (i), vx
-        for idx in 0.uint8..x:
+        for idx in 0'u8..x:
           memory[i + idx] = v[idx]
       of 0x6: # ld vx, (i)
-        for idx in 0.uint8..x:
+        for idx in 0'u8..x:
           v[idx] = memory[i + idx]
       else: invalidOperation(opcode)
     else: invalidOperation(opcode)
